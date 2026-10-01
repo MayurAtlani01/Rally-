@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { X } from 'lucide-react';
 import { api, setApiSession, clearApiSession, getApiSession } from '../services/api.js';
 import { supabaseAuth, isSupabaseConfigured } from '../services/supabase.js';
 
@@ -9,6 +10,9 @@ export function AuthProvider({ children }) {
   const [currentEvent, setCurrentEvent] = useState(null);
   const [userEvents, setUserEvents] = useState([]);
   const [userRole, setUserRole] = useState('organizer');
+  const [isSamplePreview, setIsSamplePreviewState] = useState(() => {
+    return localStorage.getItem('rally_sample_preview') !== 'false';
+  });
   const [personas, setPersonas] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,12 +29,62 @@ export function AuthProvider({ children }) {
   });
   const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false);
 
+  const clearPendingInvite = useCallback(() => {
+    setPendingInviteCode(null);
+    localStorage.removeItem('rally_pending_invite');
+    if (window.location.search.includes('invite')) {
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
+
+  const setIsSamplePreview = (val) => {
+    setIsSamplePreviewState(val);
+    localStorage.setItem('rally_sample_preview', val ? 'true' : 'false');
+  };
+
+  const toggleUserRole = () => {
+    const nextRole = userRole === 'volunteer' ? 'organizer' : 'volunteer';
+    setUserRole(nextRole);
+    showToast(`Switched active role to ${nextRole.toUpperCase()}`, 'info');
+  };
+
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type, id: Date.now() });
     setTimeout(() => {
       setToast(curr => (curr && curr.id === Date.now() ? null : null));
     }, 4500);
   }, []);
+
+  const redeemPendingInvite = useCallback(async (explicitCode = null) => {
+    const rawCode = explicitCode || pendingInviteCode || localStorage.getItem('rally_pending_invite');
+    if (!rawCode) return null;
+    const cleanCode = rawCode.trim().toUpperCase();
+    try {
+      const res = await api.joinEvent(cleanCode);
+      clearPendingInvite();
+      setIsSamplePreview(false);
+      if (res?.event) {
+        setApiSession(currentUser?.id, res.event.id, getApiSession().token);
+        setCurrentEvent(res.event);
+        setUserRole('volunteer');
+        showToast(res.message || `Successfully joined ${res.event.title}!`, 'success');
+      }
+      return res;
+    } catch (err) {
+      console.warn('Auto-join pending invite notice:', err.message);
+      // If already a member or invalid, clear pending code to avoid stuck loops
+      if (
+        err.message?.includes('already an active') ||
+        err.message?.includes('Invalid') ||
+        err.status === 400 ||
+        err.status === 404
+      ) {
+        clearPendingInvite();
+      }
+      return null;
+    }
+  }, [pendingInviteCode, currentUser?.id, showToast, clearPendingInvite]);
 
   const refreshUserData = useCallback(async () => {
     try {
@@ -162,6 +216,7 @@ export function AuthProvider({ children }) {
         setApiSession(res.user.id, null, res.token);
       }
       await refreshUserData();
+      await redeemPendingInvite();
       showToast('Signed in successfully.', 'success');
       return true;
     } catch (err) {
@@ -209,6 +264,7 @@ export function AuthProvider({ children }) {
       }
 
       await refreshUserData();
+      await redeemPendingInvite();
       showToast('Account registered successfully!', 'success');
       return { success: true };
     } catch (err) {
@@ -218,6 +274,13 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   };
+
+  // Auto-redeem pending invite if authenticated user lands with an invite
+  useEffect(() => {
+    if (currentUser && pendingInviteCode) {
+      redeemPendingInvite();
+    }
+  }, [currentUser, pendingInviteCode, redeemPendingInvite]);
 
   // Logout action
   const logout = async () => {
@@ -250,6 +313,7 @@ export function AuthProvider({ children }) {
 
   const selectEvent = async (eventObj) => {
     if (!eventObj) return;
+    setIsSamplePreview(false);
     setApiSession(currentUser?.id, eventObj.id, getApiSession().token);
     setCurrentEvent(eventObj);
     try {
@@ -283,16 +347,15 @@ export function AuthProvider({ children }) {
     await refreshUserData();
   };
 
-  const clearPendingInvite = () => {
-    setPendingInviteCode(null);
-    localStorage.removeItem('rally_pending_invite');
-  };
-
   const value = {
     currentUser,
     currentEvent,
     userEvents,
     userRole,
+    setUserRole,
+    toggleUserRole,
+    isSamplePreview,
+    setIsSamplePreview,
     isOrganizer: userRole === 'organizer',
     isCoordinator: userRole === 'coordinator',
     isVolunteer: userRole === 'volunteer',
@@ -312,6 +375,7 @@ export function AuthProvider({ children }) {
     pendingInviteCode,
     setPendingInviteCode,
     clearPendingInvite,
+    redeemPendingInvite,
     emailConfirmationRequired
   };
 
@@ -324,9 +388,10 @@ export function AuthProvider({ children }) {
           {toast.message}
           <button
             onClick={() => setToast(null)}
-            className="ml-2 text-slate-400 hover:text-white"
+            className="ml-2 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+            aria-label="Close notification"
           >
-            ×
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}

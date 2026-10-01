@@ -17,7 +17,7 @@ import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function VolunteerDirectoryPage() {
-  const { currentEvent, showToast, isOrganizer } = useAuth();
+  const { currentEvent, showToast, isOrganizer, isSamplePreview } = useAuth();
   const [volunteers, setVolunteers] = useState([]);
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +29,8 @@ export default function VolunteerDirectoryPage() {
   const [appointRole, setAppointRole] = useState('volunteer');
   const [appointedZones, setAppointedZones] = useState([]);
   const [savingRole, setSavingRole] = useState(false);
+
+  const inviteCode = currentEvent?.inviteCode || (isSamplePreview ? 'RALLY-2026' : 'IGNITE-JKI1U');
 
   const loadData = useCallback(async () => {
     if (!currentEvent) return;
@@ -79,9 +81,9 @@ export default function VolunteerDirectoryPage() {
   };
 
   const handleCopyInviteLink = () => {
-    const url = `${window.location.origin}/?invite=${currentEvent.inviteCode}`;
-    navigator.clipboard.writeText(url);
-    showToast('Invitation link copied to clipboard!', 'success');
+    const url = `${window.location.origin}/?invite=${inviteCode}`;
+    navigator.clipboard?.writeText(url);
+    showToast(`Volunteer invitation link copied (${inviteCode})!`, 'success');
   };
 
   // Unique list of skills for filtering
@@ -151,6 +153,20 @@ export default function VolunteerDirectoryPage() {
               ))}
             </select>
           </div>
+
+          <button
+            type="button"
+            onClick={handleCopyInviteLink}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            style={{
+              backgroundColor: 'var(--action-lime)',
+              color: 'var(--action-lime-text)'
+            }}
+            title="Copy volunteer invitation link"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>Invite Volunteers</span>
+          </button>
         </div>
       </div>
 
@@ -315,9 +331,10 @@ export default function VolunteerDirectoryPage() {
               </div>
               <button
                 onClick={() => setSelectedVolunteer(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 flex items-center justify-center cursor-pointer"
+                title="Close"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 

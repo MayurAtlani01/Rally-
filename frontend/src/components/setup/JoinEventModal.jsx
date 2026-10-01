@@ -1,33 +1,72 @@
-import React, { useState } from 'react';
-import { X, KeyRound, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, KeyRound, CheckCircle2, AlertCircle, MapPin, Calendar, Loader2 } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
 
 export default function JoinEventModal({ onClose, onSuccess }) {
-  const { selectEvent, showToast, refreshUserData } = useAuth();
+  const { selectEvent, showToast, refreshUserData, setIsSamplePreview } = useAuth();
   const navigate = useNavigate();
   const [inviteCode, setInviteCode] = useState('');
+  const [previewEvent, setPreviewEvent] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Live preview check as user types
+  useEffect(() => {
+    const clean = inviteCode.trim().toUpperCase();
+    if (clean.length < 3) {
+      setPreviewEvent(null);
+      setPreviewError('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      setPreviewError('');
+      try {
+        const res = await api.previewInvite(clean);
+        const ev = res?.event || res;
+        if (ev && ev.title) {
+          setPreviewEvent(ev);
+        } else {
+          setPreviewEvent(null);
+          setPreviewError('No active event matches this code.');
+        }
+      } catch (err) {
+        setPreviewEvent(null);
+        setPreviewError(err.message || 'Invalid or expired invitation code.');
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [inviteCode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!inviteCode.trim()) {
+    const cleanCode = inviteCode.trim().toUpperCase();
+    if (!cleanCode) {
       showToast('Please enter an invitation code.', 'error');
       return;
     }
 
     setSubmitting(true);
     try {
-      const res = await api.joinEvent(inviteCode.trim());
+      const res = await api.joinEvent(cleanCode);
       showToast(res.message || 'Successfully joined event!', 'success');
-      await selectEvent(res.event);
+      setIsSamplePreview(false);
+      if (res?.event) {
+        await selectEvent(res.event);
+      }
       await refreshUserData();
       onSuccess?.();
       onClose();
       navigate('/volunteer/today');
     } catch (err) {
-      showToast(err.message || 'Invalid invitation code.', 'error');
+      showToast(err.message || 'Invalid or expired invitation code.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -70,6 +109,7 @@ export default function JoinEventModal({ onClose, onSuccess }) {
           <button
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl"
+            aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
@@ -80,21 +120,66 @@ export default function JoinEventModal({ onClose, onSuccess }) {
             <label className="text-xs font-bold block mb-1" style={{ color: 'var(--text-heading)' }}>
               Invitation Code
             </label>
-            <input
-              type="text"
-              required
-              maxLength={12}
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="e.g. INV-XXXXXX"
-              className="w-full px-4 py-3 rounded-xl border text-center font-mono text-base font-extrabold tracking-widest uppercase outline-hidden"
+            <div className="relative">
+              <input
+                type="text"
+                required
+                maxLength={32}
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="e.g. RALLY-2026 or INV-XXXXXX"
+                className="w-full px-4 py-3 rounded-xl border text-center font-mono text-base font-extrabold tracking-widest uppercase outline-hidden"
+                style={{
+                  backgroundColor: 'var(--bg-surface-subtle)',
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-heading)'
+                }}
+              />
+              {previewLoading && (
+                <div className="absolute right-3 top-3 text-slate-400">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Live Preview Card */}
+          {previewEvent && (
+            <div
+              className="p-3.5 rounded-xl border animate-in fade-in"
               style={{
                 backgroundColor: 'var(--bg-surface-subtle)',
-                borderColor: 'var(--border-subtle)',
-                color: 'var(--text-heading)'
+                borderColor: 'var(--emerald-success, #10b981)'
               }}
-            />
-          </div>
+            >
+              <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Event Found</span>
+              </div>
+              <h4 className="font-extrabold text-sm mb-1" style={{ color: 'var(--text-heading)' }}>
+                {previewEvent.title}
+              </h4>
+              {previewEvent.venueName && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+                  <MapPin className="w-3.5 h-3.5 shrink-0" />
+                  <span>{previewEvent.venueName}</span>
+                </div>
+              )}
+              {previewEvent.startDate && (
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Calendar className="w-3 h-3 shrink-0" />
+                  <span>{new Date(previewEvent.startDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {previewError && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{previewError}</span>
+            </div>
+          )}
 
           <div
             className="p-3.5 rounded-xl border text-[11px] leading-relaxed"
@@ -107,7 +192,7 @@ export default function JoinEventModal({ onClose, onSuccess }) {
             <strong className="block mb-0.5 font-bold" style={{ color: 'var(--text-heading)' }}>
               Role Scope Policy:
             </strong>
-            Joining via invitation code enrolls you as a verified Volunteer. Organizer access is never granted through invitation codes.
+            Joining via invitation code enrolls you as a verified Volunteer. Organizer access is never granted through public invitation codes.
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
@@ -125,12 +210,13 @@ export default function JoinEventModal({ onClose, onSuccess }) {
             <button
               type="submit"
               disabled={submitting}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors disabled:opacity-50 flex items-center gap-2"
               style={{
                 backgroundColor: 'var(--action-lime)',
                 color: 'var(--action-lime-text)'
               }}
             >
+              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{submitting ? 'Verifying Code...' : 'Join Event'}</span>
             </button>
           </div>

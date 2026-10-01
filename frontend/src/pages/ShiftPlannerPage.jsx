@@ -12,7 +12,8 @@ import {
   Filter,
   Plus,
   X,
-  UserMinus
+  UserMinus,
+  ArrowUpRight
 } from 'lucide-react';
 import { api } from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -466,9 +467,10 @@ export default function ShiftPlannerPage() {
                             {(isOrganizer || isCoordinator) && (
                               <button
                                 onClick={() => setMatchShift(shift)}
-                                className="font-bold text-[#7054E8] hover:underline text-xs"
+                                className="font-bold text-[#7054E8] hover:underline text-xs inline-flex items-center gap-1 cursor-pointer"
                               >
-                                Find replacement ↗
+                                <span>Find replacement</span>
+                                <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
                               </button>
                             )}
                           </div>

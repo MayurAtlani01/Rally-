@@ -17,17 +17,18 @@ import ReportsPage from './pages/ReportsPage.jsx';
 import EventSetupPage from './pages/EventSetupPage.jsx';
 import EventSetupModal from './components/setup/EventSetupModal.jsx';
 import JoinEventModal from './components/setup/JoinEventModal.jsx';
+import { LogOut, X } from 'lucide-react';
 import { useAuth } from './context/AuthContext.jsx';
 
 export default function App() {
   const location = useLocation();
-  const { loading, refreshUserData, personas, currentUser, userEvents, userRole, switchPersona } = useAuth();
+  const { loading, refreshUserData, personas, currentUser, userEvents, userRole, switchPersona, logout } = useAuth();
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [showJoinEvent, setShowJoinEvent] = useState(false);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
-  const isPublicLanding = location.pathname === '/';
+  const isLandingPath = location.pathname === '/' || location.pathname === '/landing';
   const hasInviteParam = location.search.includes('invite') || location.pathname.startsWith('/join');
 
   if (loading) {
@@ -46,12 +47,13 @@ export default function App() {
 
   // Not authenticated
   if (!currentUser) {
-    if (isPublicLanding && !hasInviteParam) {
+    if (isLandingPath && !hasInviteParam) {
       return (
         <>
           <LandingPage
             onOpenCreateEvent={() => setShowAuthModal(true)}
             onOpenJoinEvent={() => setShowAuthModal(true)}
+            onLogin={() => setShowAuthModal(true)}
           />
           {showAuthModal && (
             <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -62,6 +64,31 @@ export default function App() {
       );
     }
     return <AuthPage onAuthSuccess={refreshUserData} />;
+  }
+
+  // Authenticated user directly visiting /landing
+  if (location.pathname === '/landing') {
+    return (
+      <>
+        <LandingPage
+          onOpenCreateEvent={() => setShowCreateEvent(true)}
+          onOpenJoinEvent={() => setShowJoinEvent(true)}
+          onLogin={() => {}}
+        />
+        {showCreateEvent && (
+          <EventSetupModal
+            onClose={() => setShowCreateEvent(false)}
+            onSuccess={refreshUserData}
+          />
+        )}
+        {showJoinEvent && (
+          <JoinEventModal
+            onClose={() => setShowJoinEvent(false)}
+            onSuccess={refreshUserData}
+          />
+        )}
+      </>
+    );
   }
 
   // Authenticated user with ZERO events
@@ -121,6 +148,15 @@ export default function App() {
             <Route path="/setup" element={<EventSetupPage />} />
             <Route path="/settings" element={<EventSetupPage />} />
             <Route
+              path="/landing"
+              element={
+                <LandingPage
+                  onOpenCreateEvent={() => setShowCreateEvent(true)}
+                  onOpenJoinEvent={() => setShowJoinEvent(true)}
+                />
+              }
+            />
+            <Route
               path="*"
               element={
                 <Navigate
@@ -171,9 +207,10 @@ export default function App() {
               </div>
               <button
                 onClick={() => setShowPersonaModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+                className="text-slate-400 hover:text-slate-600 p-1 flex items-center justify-center cursor-pointer"
+                title="Close"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -215,6 +252,19 @@ export default function App() {
                   </button>
                 );
               })}
+            </div>
+
+            <div className="pt-3 border-t flex items-center justify-between" style={{ borderColor: 'var(--border-subtle)' }}>
+              <button
+                onClick={() => {
+                  setShowPersonaModal(false);
+                  logout();
+                }}
+                className="w-full py-2.5 px-4 rounded-xl text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log out of account</span>
+              </button>
             </div>
           </div>
         </div>

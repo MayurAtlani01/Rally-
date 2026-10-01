@@ -139,8 +139,23 @@ export class PgRepo {
   }
 
   async getEventByInviteCode(inviteCode) {
+    const clean = (inviteCode || '').trim();
+    if (!clean) return null;
     const sql = `select * from public.get_event_invite_preview($1);`;
-    const rows = await this.query(sql, [inviteCode]);
+    let rows = await this.query(sql, [clean.toUpperCase()]);
+    if (rows.length === 0) {
+      rows = await this.query(sql, [clean]);
+    }
+    if (rows.length === 0) {
+      rows = await this.query(`
+        select * from public.events 
+        where lower(invite_code) = lower($1) 
+          and status != 'closed'
+          and invite_revoked_at is null
+          and (invite_expires_at is null or invite_expires_at > now())
+        limit 1;
+      `, [clean]);
+    }
     return rows.length > 0 ? mappers.mapEvent(rows[0]) : null;
   }
 

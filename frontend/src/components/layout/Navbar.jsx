@@ -13,31 +13,54 @@ import {
   Copy,
   Sparkles,
   RotateCcw,
-  Users
+  Users,
+  LogOut,
+  ArrowUpRight,
+  X,
+  AlertTriangle,
+  Link2,
+  Share2,
+  Mail,
+  MessageSquare,
+  ShieldCheck
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import ReportIssueModal from '../issues/ReportIssueModal.jsx';
 
 export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
   const {
     currentEvent,
+    userEvents,
     userRole,
+    isVolunteer,
     personas,
     notifications,
     unreadNotifsCount,
     switchPersona,
-    resetDemoState
+    resetDemoState,
+    logout,
+    isSamplePreview,
+    setIsSamplePreview,
+    toggleUserRole,
+    refreshUserData
   } = useAuth();
 
+  const navigate = useNavigate();
   const { toggleTheme, isNight } = useTheme();
 
   const [showEventMenu, setShowEventMenu] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showReportIssue, setShowReportIssue] = useState(false);
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  // Live ticking clock for event-local time (defaulting to 11:04 AM format)
-  const [timeString, setTimeString] = useState('');
+  // Live ticking clock for event-local time (e.g. 11:30 AM)
+  const [timeString, setTimeString] = useState(() => {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  });
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -45,16 +68,26 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
         now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
       );
     };
-    updateTime();
     const timer = setInterval(updateTime, 10000);
     return () => clearInterval(timer);
   }, []);
 
+  const effectiveInviteCode = (
+    currentEvent?.inviteCode ||
+    (isSamplePreview ? 'RALLY-2026' : (userEvents?.[0]?.inviteCode || 'IGNITE-JKI1U'))
+  );
+  const inviteUrl = `${window.location.origin}/?invite=${effectiveInviteCode}`;
+
   const handleCopyCode = () => {
-    const code = currentEvent?.inviteCode || 'TECHFEST';
-    navigator.clipboard?.writeText(code);
+    navigator.clipboard?.writeText(effectiveInviteCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard?.writeText(inviteUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   return (
@@ -69,7 +102,7 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
         <div className="max-w-[1720px] mx-auto flex items-center justify-between gap-4">
           {/* Left: Brand + Section Breadcrumb + Event Selector */}
           <div className="flex items-center gap-3 md:gap-5">
-            <Link to="/overview" className="flex items-center gap-2 group">
+            <Link to={isVolunteer ? "/volunteer/today" : "/overview"} className="flex items-center gap-2 group">
               <span
                 className="font-black text-sm tracking-widest uppercase transition-colors"
                 style={{ color: 'var(--text-heading)' }}
@@ -83,40 +116,51 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
             </Link>
 
             {/* Event Selector Pill */}
-            {currentEvent && (
-              <div className="relative">
-                <button
-                  onClick={() => setShowEventMenu(!showEventMenu)}
-                  id="event-selector-button"
-                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold transition-all shadow-2xs hover:opacity-90"
+            <div className="relative">
+              <button
+                onClick={() => setShowEventMenu(!showEventMenu)}
+                id="event-selector-button"
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold transition-all shadow-2xs hover:opacity-90"
+                style={{
+                  backgroundColor: 'var(--bg-surface)',
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-heading)'
+                }}
+              >
+                <span>{isSamplePreview ? 'Rally Festival' : (currentEvent?.title || 'Rally Festival')}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              {showEventMenu && (
+                <div
+                  className="absolute left-0 mt-2 w-72 rounded-2xl shadow-xl border p-2 z-50 animate-in fade-in duration-100"
                   style={{
                     backgroundColor: 'var(--bg-surface)',
-                    borderColor: 'var(--border-subtle)',
-                    color: 'var(--text-heading)'
+                    borderColor: 'var(--border-subtle)'
                   }}
+                  onClick={() => setShowEventMenu(false)}
                 >
-                  <span>{currentEvent.title || 'TechFest 2026'}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-
-                {showEventMenu && (
+                  <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Select Event
+                  </div>
                   <div
-                    className="absolute left-0 mt-2 w-72 rounded-2xl shadow-xl border p-2 z-50 animate-in fade-in duration-100"
-                    style={{
-                      backgroundColor: 'var(--bg-surface)',
-                      borderColor: 'var(--border-subtle)'
-                    }}
-                    onClick={() => setShowEventMenu(false)}
+                    className="px-3 py-2 rounded-xl mb-2 cursor-pointer hover:bg-white/5"
+                    style={{ backgroundColor: 'var(--bg-surface-subtle)' }}
+                    onClick={() => setIsSamplePreview(true)}
                   >
-                    <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Active Event
-                    </div>
+                    <p className="font-bold text-xs" style={{ color: 'var(--text-heading)' }}>
+                      Rally Festival (Sample Preview)
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Isometric Map • 4 Zones • 24 Volunteers</p>
+                  </div>
+                  {currentEvent && (
                     <div
-                      className="px-3 py-2 rounded-xl mb-2"
+                      className="px-3 py-2 rounded-xl mb-2 cursor-pointer hover:bg-white/5"
                       style={{ backgroundColor: 'var(--bg-surface-subtle)' }}
+                      onClick={() => setIsSamplePreview(false)}
                     >
                       <p className="font-bold text-xs" style={{ color: 'var(--text-heading)' }}>
-                        {currentEvent.title}
+                        {currentEvent.title} (Live Event)
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">{currentEvent.venueName}</p>
                       <div className="mt-2 flex items-center gap-2 text-xs">
@@ -132,32 +176,42 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
                         </span>
                       </div>
                     </div>
-                    <div className="border-t pt-1 flex flex-col gap-1" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <button
-                        onClick={onOpenJoinEvent}
-                        className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        style={{ color: 'var(--text-heading)' }}
-                      >
-                        <UserCheck className="w-4 h-4 text-violet-500" />
-                        Join another event
-                      </button>
-                      <button
-                        onClick={onOpenCreateEvent}
-                        className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        style={{ color: 'var(--text-heading)' }}
-                      >
-                        <Plus className="w-4 h-4 text-emerald-500" />
-                        Create new event
-                      </button>
-                    </div>
+                  )}
+                  <div className="border-t pt-1 flex flex-col gap-1" style={{ borderColor: 'var(--border-subtle)' }}>
+                    <button
+                      onClick={onOpenJoinEvent}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      style={{ color: 'var(--text-heading)' }}
+                    >
+                      <UserCheck className="w-4 h-4 text-violet-500" />
+                      Join another event
+                    </button>
+                    <button
+                      onClick={onOpenCreateEvent}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      style={{ color: 'var(--text-heading)' }}
+                    >
+                      <Plus className="w-4 h-4 text-emerald-500" />
+                      Create new event
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
+
+            {/* DESIGN PREVIEW • SAMPLE EVENT Pill */}
+            <button
+              onClick={() => setIsSamplePreview(!isSamplePreview)}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border border-purple-500/30 bg-purple-950/40 text-purple-300 hover:bg-purple-900/50 transition-all cursor-pointer shadow-2xs"
+              title="Click to toggle sample event preview mode"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isSamplePreview ? 'bg-purple-400 animate-pulse' : 'bg-slate-500'}`} />
+              <span>DESIGN PREVIEW • SAMPLE EVENT</span>
+            </button>
           </div>
 
-          {/* Right: Live indicator + Time + Theme Switcher + Notifications + Invite team */}
-          <div className="flex items-center gap-2.5 sm:gap-4">
+          {/* Right: Live indicator + Time + Theme Switcher + Role Switcher + Notifications + Action Button */}
+          <div className="flex items-center gap-2.5 sm:gap-3.5">
             {/* Live Connection & Event Time */}
             <div
               className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full border shadow-2xs"
@@ -173,7 +227,7 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
               </span>
               <span className="text-slate-400 text-[10px]">•</span>
               <span className="tabular-nums text-xs font-bold text-slate-700 dark:text-slate-300">
-                {timeString || '11:04 AM'}
+                {timeString || '11:30 AM'}
               </span>
             </div>
 
@@ -193,71 +247,28 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
               {isNight ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Persona Switcher Quick Pill */}
-            <div className="relative hidden xl:block">
+            {/* Role Switcher Button (Matching purple badge in Image 3) */}
+            <div className="relative">
               <button
-                onClick={() => setShowPersonaMenu(!showPersonaMenu)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs font-semibold shadow-2xs hover:opacity-90"
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  borderColor: 'var(--border-subtle)',
-                  color: 'var(--text-heading)'
+                onClick={() => {
+                  const nextRole = userRole === 'volunteer' ? 'organizer' : 'volunteer';
+                  toggleUserRole();
+                  if (nextRole === 'volunteer') {
+                    navigate('/volunteer/today');
+                  } else {
+                    navigate('/overview');
+                  }
                 }}
-                title="Switch persona (Organizer / Coordinator / Volunteer)"
+                id="role-switch-button"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm cursor-pointer hover:opacity-90 active:scale-95 border border-purple-500/50 bg-[#2e1065] text-purple-200"
+                title="Click to switch between ORGANIZER and VOLUNTEER dashboard views"
               >
-                <Sparkles className="w-3.5 h-3.5 text-violet-500" />
-                <span className="text-[11px] text-slate-500">Role:</span>
-                <span className="text-[11px] font-bold uppercase">{userRole}</span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                <span className="text-[11px] font-bold uppercase tracking-wider">
+                  ROLE: {userRole}
+                </span>
+                <ChevronDown className="w-3 h-3 text-purple-300 opacity-60" />
               </button>
-
-              {showPersonaMenu && (
-                <div
-                  className="absolute right-0 mt-2 w-72 rounded-2xl shadow-xl border p-2 z-50 animate-in fade-in duration-100"
-                  style={{
-                    backgroundColor: 'var(--bg-surface)',
-                    borderColor: 'var(--border-subtle)'
-                  }}
-                  onClick={() => setShowPersonaMenu(false)}
-                >
-                  <div className="px-3 py-1.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-subtle)' }}>
-                    <span className="text-xs font-bold" style={{ color: 'var(--text-heading)' }}>
-                      Switch Persona
-                    </span>
-                    <button
-                      onClick={resetDemoState}
-                      className="text-[10px] text-violet-500 hover:underline flex items-center gap-1"
-                    >
-                      <RotateCcw className="w-2.5 h-2.5" />
-                      Reset demo
-                    </button>
-                  </div>
-                  <div className="py-1 max-h-60 overflow-y-auto">
-                    {personas.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => switchPersona(p.id)}
-                        className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      >
-                        <img
-                          src={p.avatarUrl}
-                          alt={p.name}
-                          className="w-7 h-7 rounded-full object-cover border"
-                          style={{ borderColor: 'var(--border-strong)' }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold truncate" style={{ color: 'var(--text-heading)' }}>
-                            {p.name}
-                          </p>
-                          <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">
-                            {p.role}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Notifications Bell */}
@@ -322,78 +333,219 @@ export default function Navbar({ onOpenCreateEvent, onOpenJoinEvent }) {
               )}
             </div>
 
-            {/* Lime "Invite team ↗" Button */}
+            {/* Action Button: "Invite team" (Organizer) vs "Report issue" (Volunteer) */}
+            {isVolunteer ? (
+              <button
+                onClick={() => setShowReportIssue(true)}
+                id="navbar-report-issue-button"
+                className="px-3.5 py-1.5 rounded-full font-bold text-xs flex items-center gap-1.5 border border-rose-500/40 text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 active:scale-95 transition-all shadow-sm cursor-pointer"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <span>Report issue</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowInviteModal(true)}
+                id="invite-team-button"
+                className="px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 shadow-sm hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                style={{
+                  backgroundColor: 'var(--action-lime)',
+                  color: 'var(--action-lime-text)'
+                }}
+              >
+                <span>Invite team</span>
+                <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            )}
+
+            {/* Direct Logout Button */}
             <button
-              onClick={() => setShowInviteModal(true)}
-              id="invite-team-button"
-              className="px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 shadow-sm hover:opacity-90 active:scale-95 transition-all"
+              onClick={logout}
+              id="navbar-direct-logout"
+              className="p-2 rounded-full border transition-all hover:scale-105 shadow-2xs hover:border-rose-300 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
               style={{
-                backgroundColor: 'var(--action-lime)',
-                color: 'var(--action-lime-text)'
+                backgroundColor: 'var(--bg-surface)',
+                borderColor: 'var(--border-subtle)',
+                color: 'var(--text-muted)'
               }}
+              title="Log out of RALLY"
+              aria-label="Log out"
             >
-              <span>Invite team</span>
-              <span className="text-xs leading-none">↗</span>
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
       </header>
 
+      {/* Volunteer Report Issue Modal */}
+      {showReportIssue && (
+        <ReportIssueModal
+          initialZoneId={null}
+          onClose={() => setShowReportIssue(false)}
+          onSuccess={refreshUserData}
+        />
+      )}
+
       {/* Invite Team Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div
-            className="w-full max-w-md rounded-3xl p-6 shadow-2xl border animate-in zoom-in-95"
+            className="w-full max-w-lg rounded-3xl p-6 shadow-2xl border animate-in zoom-in-95 space-y-5"
             style={{
               backgroundColor: 'var(--bg-surface)',
               borderColor: 'var(--border-subtle)'
             }}
           >
             <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-violet-500" />
-                <h3 className="text-base font-extrabold" style={{ color: 'var(--text-heading)' }}>
-                  Invite Team Members
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{
+                    backgroundColor: 'var(--lilac-subtle)',
+                    color: 'var(--lilac-accent)'
+                  }}
+                >
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold" style={{ color: 'var(--text-heading)' }}>
+                    Invite Crew & Volunteers
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {currentEvent?.title || 'Event Team Onboarding'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowInviteModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 flex items-center justify-center cursor-pointer rounded-lg"
+                title="Close"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-              Share this invite code or link with coordinators and volunteers. They can join {currentEvent?.title} directly without needing pre-created accounts.
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Anyone with this invitation link or code can join this event directly. When they sign up or log in, they will be automatically enrolled as a Volunteer.
             </p>
 
-            <div className="mt-4 p-4 rounded-2xl border" style={{ backgroundColor: 'var(--bg-surface-subtle)', borderColor: 'var(--border-subtle)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                Event Invite Code
-              </span>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-mono text-xl font-black tracking-widest" style={{ color: 'var(--text-heading)' }}>
-                  {currentEvent?.inviteCode || 'TECHFEST'}
+            {/* Direct Invitation Link */}
+            <div
+              className="p-3.5 rounded-2xl border space-y-2"
+              style={{
+                backgroundColor: 'var(--bg-surface-subtle)',
+                borderColor: 'var(--border-subtle)'
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5" />
+                  Direct Invitation Link
                 </span>
+                <span className="text-[10px] text-slate-400 font-medium">Auto-enrolling</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteUrl}
+                  className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border bg-black/10 dark:bg-black/30 border-slate-700/30 text-slate-300 select-all outline-hidden truncate"
+                />
                 <button
-                  onClick={handleCopyCode}
-                  className="px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs"
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-xs"
                   style={{
-                    backgroundColor: copiedCode ? 'var(--emerald-success)' : 'var(--action-lime)',
-                    color: copiedCode ? '#FFFFFF' : 'var(--action-lime-text)'
+                    backgroundColor: copiedLink ? 'var(--emerald-success)' : 'var(--action-lime)',
+                    color: copiedLink ? '#FFFFFF' : 'var(--action-lime-text)'
                   }}
                 >
-                  {copiedCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Event Code Section */}
+            <div
+              className="p-3.5 rounded-2xl border"
+              style={{
+                backgroundColor: 'var(--bg-surface-subtle)',
+                borderColor: 'var(--border-subtle)'
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Manual Join Code
+                  </span>
+                  <span className="font-mono text-lg font-black tracking-widest" style={{ color: 'var(--text-heading)' }}>
+                    {effectiveInviteCode}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className="px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 border transition-all cursor-pointer hover:bg-slate-500/10"
+                  style={{
+                    borderColor: 'var(--border-subtle)',
+                    color: 'var(--text-heading)'
+                  }}
+                >
+                  {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedCode ? 'Copied!' : 'Copy Code'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end">
+            {/* Quick Share Buttons */}
+            <div className="flex items-center gap-2 pt-1">
+              <a
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Join our team for ${currentEvent?.title || 'the festival'} on RALLY: ${inviteUrl}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2 px-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold hover:bg-slate-500/10 transition-colors"
+                style={{
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-heading)'
+                }}
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
+                <span>WhatsApp</span>
+              </a>
+              <a
+                href={`mailto:?subject=${encodeURIComponent(`Join ${currentEvent?.title || 'Event'} Crew on RALLY`)}&body=${encodeURIComponent(`You have been invited to join the volunteer crew for ${currentEvent?.title || 'our event'}.\n\nClick this link to join directly:\n${inviteUrl}\n\nInvite Code: ${effectiveInviteCode}`)}`}
+                className="flex-1 py-2 px-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-semibold hover:bg-slate-500/10 transition-colors"
+                style={{
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-heading)'
+                }}
+              >
+                <Mail className="w-3.5 h-3.5 text-violet-400" />
+                <span>Email</span>
+              </a>
+            </div>
+
+            {/* Security Notice */}
+            <div
+              className="p-3 rounded-xl border flex items-start gap-2.5 text-[11px] leading-relaxed"
+              style={{
+                backgroundColor: 'var(--bg-surface-subtle)',
+                borderColor: 'var(--border-subtle)',
+                color: 'var(--text-muted)'
+              }}
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+              <span>
+                <strong>Volunteer Security:</strong> Joining via this invite grants Volunteer access only. Organizer and administrative controls are protected.
+              </span>
+            </div>
+
+            <div className="flex justify-end pt-2">
               <button
+                type="button"
                 onClick={() => setShowInviteModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold border hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="px-5 py-2 rounded-xl text-xs font-bold border hover:bg-slate-500/10 transition-colors cursor-pointer"
                 style={{
                   borderColor: 'var(--border-subtle)',
                   color: 'var(--text-heading)'

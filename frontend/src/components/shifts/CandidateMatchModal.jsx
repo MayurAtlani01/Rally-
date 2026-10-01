@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   ArrowRight,
   ShieldCheck,
-  Award
+  Award,
+  Star
 } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -197,7 +198,7 @@ export default function CandidateMatchModal({
                             className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[10px] font-black"
                             title="Top Ranked Candidate"
                           >
-                            ★
+                            <Star className="w-2.5 h-2.5 fill-current" />
                           </span>
                         )}
                       </div>

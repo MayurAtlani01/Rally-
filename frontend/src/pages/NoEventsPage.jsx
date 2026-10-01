@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, KeyRound, LogOut, Sparkles, MapPin, Clock, ArrowRight, UserCheck } from 'lucide-react';
+import { Calendar, Plus, KeyRound, LogOut, Sparkles, MapPin, Clock, ArrowRight, UserCheck, Moon, Sun } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { api } from '../services/api.js';
 
 export default function NoEventsPage({ onCreateEvent, onJoinEvent }) {
-  const { currentUser, logout, pendingInviteCode, clearPendingInvite, selectEvent, showToast, refreshUserData } = useAuth();
+  const { currentUser, logout, pendingInviteCode, clearPendingInvite, selectEvent, showToast, refreshUserData, setIsSamplePreview } = useAuth();
   const { isNight, toggleTheme } = useTheme();
 
   const [previewData, setPreviewData] = useState(null);
@@ -15,8 +15,9 @@ export default function NoEventsPage({ onCreateEvent, onJoinEvent }) {
   useEffect(() => {
     if (!pendingInviteCode) return;
     setLoadingPreview(true);
-    api.previewInvite(pendingInviteCode)
-      .then(data => setPreviewData(data))
+    const clean = pendingInviteCode.trim().toUpperCase();
+    api.previewInvite(clean)
+      .then(data => setPreviewData(data?.event || data))
       .catch(err => {
         console.warn('Invite preview notice:', err.message);
         setPreviewData(null);
@@ -28,10 +29,14 @@ export default function NoEventsPage({ onCreateEvent, onJoinEvent }) {
     if (!pendingInviteCode) return;
     setJoining(true);
     try {
-      const res = await api.joinEvent(pendingInviteCode);
+      const clean = pendingInviteCode.trim().toUpperCase();
+      const res = await api.joinEvent(clean);
       showToast(res.message || 'Joined event successfully!', 'success');
       clearPendingInvite();
-      await selectEvent(res.event);
+      setIsSamplePreview(false);
+      if (res?.event) {
+        await selectEvent(res.event);
+      }
       await refreshUserData();
     } catch (err) {
       showToast(err.message || 'Failed to join event', 'error');
@@ -70,14 +75,24 @@ export default function NoEventsPage({ onCreateEvent, onJoinEvent }) {
         <div className="flex items-center gap-3">
           <button
             onClick={toggleTheme}
-            className="px-3 py-1.5 rounded-full border text-xs font-bold transition-all shadow-2xs"
+            className="px-3 py-1.5 rounded-full border text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5"
             style={{
               borderColor: 'var(--border-subtle)',
               backgroundColor: 'var(--bg-surface)',
               color: 'var(--text-heading)'
             }}
           >
-            {isNight ? '🌙 Night mode' : '☀️ Day mode'}
+            {isNight ? (
+              <>
+                <Moon className="w-3.5 h-3.5 text-violet-400" />
+                <span>Night mode</span>
+              </>
+            ) : (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span>Day mode</span>
+              </>
+            )}
           </button>
 
           <div

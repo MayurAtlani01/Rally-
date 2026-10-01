@@ -8,10 +8,11 @@ const router = Router();
 // Public preview endpoint for invitation links (accessible before login)
 // Security: returns strictly minimal public event metadata without leaking rosters or organizer profiles
 const handlePreview = async (req, res) => {
-  const inviteCode = req.params.inviteCode || req.query.code || req.query.inviteCode;
-  if (!inviteCode) {
+  const rawCode = req.params.inviteCode || req.query.code || req.query.inviteCode;
+  if (!rawCode || !rawCode.trim()) {
     return res.status(400).json({ error: 'Invite code is required.' });
   }
+  const inviteCode = rawCode.trim();
   const repo = getRepo();
   const ev = await repo.getEventByInviteCode(inviteCode);
   if (!ev) {
@@ -126,11 +127,12 @@ router.post('/', async (req, res) => {
 // Join event via invitation code
 // Security rule: Joining via public invite grants strictly Volunteer role, never Organizer
 router.post('/join', async (req, res) => {
-  const { inviteCode } = req.body;
-  if (!inviteCode) {
+  const { inviteCode: rawCode } = req.body;
+  if (!rawCode || !rawCode.trim()) {
     return res.status(400).json({ error: 'Invitation code is required.' });
   }
 
+  const inviteCode = rawCode.trim();
   const repo = getRepo();
   const ev = await repo.getEventByInviteCode(inviteCode);
   if (!ev) {

@@ -205,10 +205,42 @@ export class SupabaseRepo {
   }
 
   async getEventByInviteCode(inviteCode) {
-    const { data, error } = await this.getClient()
-      .rpc('get_event_invite_preview', { p_invite_code: inviteCode });
-    if (error || !data || data.length === 0) return null;
-    return mappers.mapEvent(data[0]);
+    const clean = (inviteCode || '').trim();
+    if (!clean) return null;
+
+    try {
+      const { data, error } = await this.getClient()
+        .rpc('get_event_invite_preview', { p_invite_code: clean.toUpperCase() });
+      if (!error && data && data.length > 0) return mappers.mapEvent(data[0]);
+    } catch (e) {
+      console.warn('RPC invite preview error:', e?.message || e);
+    }
+
+    try {
+      const { data, error } = await this.getClient()
+        .rpc('get_event_invite_preview', { p_invite_code: clean });
+      if (!error && data && data.length > 0) return mappers.mapEvent(data[0]);
+    } catch (e) {
+      console.warn('RPC invite preview fallback error:', e?.message || e);
+    }
+
+    try {
+      const now = new Date().toISOString();
+      const { data: directData, error: dirErr } = await this.getClient()
+        .from('events')
+        .select('*')
+        .ilike('invite_code', clean)
+        .neq('status', 'closed')
+        .is('invite_revoked_at', null)
+        .or(`invite_expires_at.is.null,invite_expires_at.gt.${now}`)
+        .maybeSingle();
+
+      if (!dirErr && directData) return mappers.mapEvent(directData);
+    } catch (e) {
+      console.warn('Direct invite code lookup error:', e?.message || e);
+    }
+
+    return null;
   }
 
   async createEvent(eventData, creatorId) {
