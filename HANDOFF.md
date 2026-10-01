@@ -87,14 +87,16 @@ npm run dev -w frontend
 
 #### Run Automated Test Suite
 ```bash
-# Backend unit, integration, and lifecycle tests (25/25 passing)
+# Backend unit, integration, concurrency, and lifecycle tests (57/57 passing)
+npm test
+# Or run with node test runner:
 node --test tests/*.test.js
 ```
 
 #### Code Quality & Production Build
 ```bash
-# Run ESLint (0 errors, 0 warnings)
-npm run lint
+# Run ESLint on backend, shared code, tests, and scripts (0 errors, 0 warnings)
+npx eslint backend/src shared tests scripts
 
 # Run Vite Production Bundle Build
 npm run build -w frontend
@@ -102,7 +104,9 @@ npm run build -w frontend
 
 ---
 
-### 6. Remaining Limitations & Future Work
-- **Device-Local Storage**: Currently operates in `local-json` fallback mode when remote Supabase credentials are not configured. Adding Supabase credentials enables remote Postgres replication.
-- **Physical QR Scanner**: Attendance check-in supports in-browser QR scanning via camera or 1-click token entry for instant demonstration.
-- **Push Notifications**: Live alerts use in-app polling (15s heartbeat) and state synchronization. WebPush ServiceWorker can be added for background native OS notifications.
+### 6. Persistence & Live Operations Architecture
+- **Real Supabase PostgreSQL Persistence**: All normal operations execute against PostgreSQL via Supabase PostgREST and transactional RPC functions (`create_event_with_organizer`, `assign_volunteer_atomic`, `reassign_volunteer_atomic`, `record_check_in_atomic`, `record_check_out_atomic`, `claim_urgent_issues_for_escalation`). Silent JSON demo fallbacks and fake headers have been removed.
+- **Strict Verification & Permissions**: All API routes verify the Supabase JWT Bearer token using official Supabase verification. Non-members cannot access event routes; coordinators are strictly bounded to their assigned zones; reporters cannot alter issue status/assignees.
+- **Transactional Assignment & Concurrency Safety**: Row-level locking on shift records prevents capacity overflow under concurrent requests, prevents double-booking across shifts, and revalidates availability and membership atomically.
+- **Automated Issue Escalation**: Background escalation queries shared Postgres state and uses atomic row-level claiming (`claim_urgent_issues_for_escalation`) to prevent duplicate alerts when multiple workers or server instances are running.
+- **Contract & Handoff Reference**: For all API request/response specifications and frontend integration guidelines, see `backend-contract.md`.

@@ -1,21 +1,22 @@
 import { Router } from 'express';
-import { store } from '../store.js';
-import { authMiddleware } from '../authMiddleware.js';
-import { ROLES, ASSIGNMENT_STATUSES, ISSUE_STATUSES } from '../../../shared/constants.js';
+import { getRepo } from '../db/repo.js';
+import { authMiddleware, requireRole } from '../authMiddleware.js';
+import { ROLES, ASSIGNMENT_STATUSES } from '../../../shared/constants.js';
 
 const router = Router();
 router.use(authMiddleware);
 
-router.get('/:id/report', (req, res) => {
+router.get('/:id/report', requireRole(ROLES.ORGANIZER, ROLES.COORDINATOR), async (req, res) => {
   const eventId = req.params.id;
-  const ev = store.getEventById(eventId);
+  const repo = getRepo();
+  const ev = await repo.getEventById(eventId);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
 
-  const shifts = store.getShifts(eventId);
-  const assignments = store.getAssignments(eventId);
-  const attendance = store.getAttendance(eventId);
-  const issues = store.getIssues(eventId);
-  const zones = store.getZones(eventId);
+  const shifts = await repo.getShifts(eventId);
+  const assignments = await repo.getAssignments(eventId);
+  const attendance = await repo.getAttendance(eventId);
+  const issues = await repo.getIssues(eventId);
+  const zones = await repo.getZones(eventId);
 
   // 1. Attendance calculations
   const validActiveAssignments = assignments.filter(
@@ -47,7 +48,6 @@ router.get('/:id/report', (req, res) => {
       const hrs = (new Date(att.checkOutTime) - new Date(att.checkInTime)) / (1000 * 60 * 60);
       totalAttendedHours += hrs;
     } else if (att.checkInTime && !att.checkOutTime) {
-      // In progress or missing checkout - honestly marked as incomplete, not invented
       incompleteRecordsCount++;
     }
   }
@@ -79,119 +79,94 @@ router.get('/:id/report', (req, res) => {
   let unfilledPositions = 0;
   const zoneBreakdown = zones.map(z => {
     const zoneShifts = shifts.filter(s => s.zoneId === z.id);
-    const required = zoneShifts.reduce((acc, s) => acc + s.requiredHeadcount, 0) || z.requiredHeadcount;
-    const filled = assignments.filter(
-      a => zoneShifts.some(s => s.id === a.shiftId) &&
-      a.status !== ASSIGNMENT_STATUSES.CANCELED &&
-      a.status !== ASSIGNMENT_STATUSES.ABSENT
-    ).length;
+    const zoneRequired = zoneShifts.reduce((acc, s) => acc + (s.requiredHeadcount || 1), 0);
+    const zoneShiftIds = new Set(zoneShifts.map(s => s.id));
+    const zoneAssigned = validActiveAssignments.filter(a => zoneShiftIds.has(a.shiftId)).length;
+    const zoneCheckedIn = attendance.filter(att => zoneShiftIds.has(att.shiftId) && att.checkInTime).length;
 
-    totalRequiredPositions += required;
-    unfilledPositions += Math.max(0, required - filled);
+    totalRequiredPositions += zoneRequired;
+    if (zoneRequired > zoneAssigned) {
+      unfilledPositions += (zoneRequired - zoneAssigned);
+    }
+
+    const fillRatePercent = zoneRequired > 0 ? Math.round((zoneAssigned / zoneRequired) * 100) : 100;
 
     return {
       zoneId: z.id,
       zoneName: z.name,
-      color: z.color,
-      requiredPositions: required,
-      filledPositions: filled,
-      fillRate: required > 0 ? Math.round((filled / required) * 100) : 100
+      requiredPositions: zoneRequired,
+      assignedPositions: zoneAssigned,
+      checkedInPositions: zoneCheckedIn,
+      fillRatePercent
     };
   });
 
+  const overallFillRate = totalRequiredPositions > 0
+    ? Math.round(((totalRequiredPositions - unfilledPositions) / totalRequiredPositions) * 100)
+    : 100;
+
   res.json({
-    event: {
-      id: ev.id,
-      title: ev.title,
-      venueName: ev.venueName,
-      startDate: ev.startDate,
-      endDate: ev.endDate
-    },
+    event: ev,
+    generatedAt: new Date().toISOString(),
     metrics: {
-      totalVolunteersRegistered: store.getMemberships(eventId).filter(m => m.role === ROLES.VOLUNTEER).length,
-      totalAssignments: validActiveAssignments.length,
-      completedOrCheckedInCount: completedOrCheckedIn.length,
       attendanceRatePercent: attendanceRate,
+      overallFillRatePercent: overallFillRate,
       totalAssignedHours: Number(totalAssignedHours.toFixed(1)),
       totalAttendedHours: Number(totalAttendedHours.toFixed(1)),
-      incompleteAttendanceRecords: incompleteRecordsCount,
+      incompleteCheckoutsCount: incompleteRecordsCount,
+      totalIssuesCount: issues.length,
+      unresolvedIssuesCount: issues.filter(i => i.status !== 'resolved').length,
+      urgentIssuesCount: issues.filter(i => i.severity === 'urgent').length,
+      averageAcknowledgeMinutes: avgAckTimeMinutes,
+      averageResolveMinutes: avgResolveTimeMinutes,
       totalRequiredPositions,
-      unfilledPositions,
-      totalIssuesReported: issues.length,
-      resolvedIssuesCount: issues.filter(i => i.status === ISSUE_STATUSES.RESOLVED).length,
-      avgAckTimeMinutes,
-      avgResolveTimeMinutes
+      unfilledPositions
     },
     zoneBreakdown
   });
 });
 
-// CSV Export
-router.get('/:id/report/csv', (req, res) => {
+router.get('/:id/report/csv', requireRole(ROLES.ORGANIZER), async (req, res) => {
   const eventId = req.params.id;
-  const ev = store.getEventById(eventId);
-  if (!ev) return res.status(404).json({ error: 'Event not found' });
+  const repo = getRepo();
+  const ev = await repo.getEventById(eventId);
+  if (!ev) return res.status(404).send('Event not found');
 
-  const shifts = store.getShifts(eventId);
-  const assignments = store.getAssignments(eventId);
-  const attendance = store.getAttendance(eventId);
-  const zones = store.getZones(eventId);
+  const shifts = await repo.getShifts(eventId);
+  const assignments = await repo.getAssignments(eventId);
+  const attendance = await repo.getAttendance(eventId);
+  const zones = await repo.getZones(eventId);
   const zonesMap = new Map(zones.map(z => [z.id, z]));
-  const profilesMap = new Map(store.getProfiles().map(p => [p.id, p]));
-  const shiftsMap = new Map(shifts.map(s => [s.id, s]));
 
-  // Build CSV rows for all assignments and attendance
-  const headers = [
-    'Assignment ID',
-    'Volunteer Name',
-    'Volunteer Email',
-    'Zone',
-    'Shift Title',
-    'Role',
-    'Shift Start',
-    'Shift End',
-    'Assignment Status',
-    'Check-in Time',
-    'Check-out Time',
-    'Hours Attended',
-    'Verification Method'
+  const rows = [
+    ['Shift Title', 'Zone', 'Volunteer ID', 'Assignment Status', 'Check-In', 'Check-Out', 'Attended Hours']
   ];
 
-  const rows = [headers.join(',')];
-
   for (const asgn of assignments) {
-    const prof = profilesMap.get(asgn.volunteerId) || {};
-    const shift = shiftsMap.get(asgn.shiftId) || {};
-    const zone = shift.zoneId ? zonesMap.get(shift.zoneId) : {};
+    const s = shifts.find(shift => shift.id === asgn.shiftId) || {};
+    const z = s.zoneId ? zonesMap.get(s.zoneId) : null;
     const att = attendance.find(a => a.assignmentId === asgn.id);
 
     let hrs = '';
-    if (att && att.checkInTime && att.checkOutTime) {
+    if (att?.checkInTime && att?.checkOutTime) {
       hrs = ((new Date(att.checkOutTime) - new Date(att.checkInTime)) / (1000 * 60 * 60)).toFixed(2);
     }
 
-    const row = [
-      `"${asgn.id}"`,
-      `"${(prof.fullName || '').replace(/"/g, '""')}"`,
-      `"${(prof.email || '').replace(/"/g, '""')}"`,
-      `"${(zone.name || '').replace(/"/g, '""')}"`,
-      `"${(shift.title || '').replace(/"/g, '""')}"`,
-      `"${(shift.roleName || '').replace(/"/g, '""')}"`,
-      `"${shift.startTime || ''}"`,
-      `"${shift.endTime || ''}"`,
+    rows.push([
+      `"${s.title || ''}"`,
+      `"${z?.name || ''}"`,
+      `"${asgn.volunteerId}"`,
       `"${asgn.status}"`,
-      `"${att?.checkInTime || ''}"`,
-      `"${att?.checkOutTime || ''}"`,
-      `"${hrs}"`,
-      `"${att?.method || ''}"`
-    ];
-
-    rows.push(row.join(','));
+      att?.checkInTime || '',
+      att?.checkOutTime || '',
+      hrs
+    ]);
   }
 
+  const csv = rows.map(r => r.join(',')).join('\n');
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="rally-${ev.inviteCode}-report.csv"`);
-  res.send(rows.join('\r\n'));
+  res.setHeader('Content-Disposition', `attachment; filename="${ev.title.replace(/\s+/g, '_')}_Report.csv"`);
+  res.send(csv);
 });
 
 export default router;

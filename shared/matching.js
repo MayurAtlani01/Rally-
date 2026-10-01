@@ -127,10 +127,20 @@ export function evaluateVolunteerEligibility(volunteer, shift, options = {}) {
   }
 
   // Zone / Role preferences
-  const preferredZones = volunteer.preferredZoneIds || [];
-  const prefersZone = shift.zoneId ? preferredZones.includes(shift.zoneId) : false;
+  const preferredZones = volunteer.preferredZoneIds || volunteer.preferredZones || [];
+  const prefersZone = shift.zoneId ? preferredZones.some(z => (typeof z === 'string' ? z === shift.zoneId : z?.id === shift.zoneId)) : false;
   if (prefersZone) {
     reasons.push('Matches volunteer zone preference.');
+  }
+
+  const preferredRoles = volunteer.preferredRoleNames || volunteer.preferredRoles || [];
+  const shiftRole = (shift.roleName || shift.title || '').trim().toLowerCase();
+  const prefersRole = shiftRole ? preferredRoles.some(r => {
+    const roleStr = (typeof r === 'string' ? r : r?.name || '').trim().toLowerCase();
+    return roleStr && (roleStr === shiftRole || shiftRole.includes(roleStr));
+  }) : false;
+  if (prefersRole) {
+    reasons.push('Matches volunteer role preference.');
   }
 
   const isEligible = ineligibilityReasons.length === 0;
@@ -140,8 +150,9 @@ export function evaluateVolunteerEligibility(volunteer, shift, options = {}) {
   // - Fewer assigned hours (higher priority): weight -10 per hour
   // - Preferred skills matched: +5 per match
   // - Preferred zone: +3
+  // - Preferred role: +2
   const rankingScore = isEligible
-    ? (100 - (currentAssignedHours * 10) + (matchedPreferredSkills.length * 5) + (prefersZone ? 3 : 0))
+    ? (100 - (currentAssignedHours * 10) + (matchedPreferredSkills.length * 5) + (prefersZone ? 3 : 0) + (prefersRole ? 2 : 0))
     : -9999;
 
   return {
@@ -152,7 +163,8 @@ export function evaluateVolunteerEligibility(volunteer, shift, options = {}) {
     currentAssignedHours,
     projectedTotalHours: currentAssignedHours + shiftHours,
     matchedPreferredSkills,
-    prefersZone
+    prefersZone,
+    prefersRole
   };
 }
 
@@ -172,7 +184,8 @@ export function rankEligibleCandidates(volunteers, shift, options = {}) {
   // 1. Fewer assigned hours (ascending)
   // 2. Preferred skills matched (descending)
   // 3. Preferred zone (descending)
-  // 4. Stable tie-break by volunteer name or ID
+  // 4. Preferred role (descending)
+  // 5. Stable tie-break by volunteer name or ID
   eligible.sort((a, b) => {
     if (a.currentAssignedHours !== b.currentAssignedHours) {
       return a.currentAssignedHours - b.currentAssignedHours;
@@ -182,6 +195,9 @@ export function rankEligibleCandidates(volunteers, shift, options = {}) {
     }
     if (a.prefersZone !== b.prefersZone) {
       return b.prefersZone ? 1 : -1;
+    }
+    if (a.prefersRole !== b.prefersRole) {
+      return b.prefersRole ? 1 : -1;
     }
     const nameA = a.volunteer.name || a.volunteer.email || a.volunteer.id;
     const nameB = b.volunteer.name || b.volunteer.email || b.volunteer.id;

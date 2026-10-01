@@ -1,72 +1,68 @@
-import { store } from './store.js';
+import { getRepo } from './db/repo.js';
+import { verifyAccessToken } from './db/supabase.js';
 import { ROLES } from '../../shared/constants.js';
 
-export function authMiddleware(req, res, next) {
-  let userId = req.headers['x-user-id'] || null;
-  let tokenPayload = null;
-
+/**
+ * Strict authentication middleware.
+ * Requires and verifies a valid Supabase Bearer access token.
+ * Rejects missing, malformed, expired, and forged tokens.
+ * Never authenticates using x-user-id or unverified token claims.
+ */
+export async function authMiddleware(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const rawToken = authHeader.slice(7).trim();
-    if (rawToken.startsWith('demo-token-')) {
-      userId = rawToken.replace('demo-token-', '');
-    } else if (rawToken.includes('.')) {
-      try {
-        const payloadBase64 = rawToken.split('.')[1];
-        const payloadJson = Buffer.from(payloadBase64, 'base64url').toString('utf8');
-        tokenPayload = JSON.parse(payloadJson);
-        if (tokenPayload.sub) {
-          userId = tokenPayload.sub;
-        }
-      } catch (e) {
-        // Not a valid JWT, ignore
-      }
-    } else if (rawToken) {
-      userId = rawToken;
-    }
-  }
-
-  if (!userId) {
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
-      error: 'Authentication required. Sign in to continue.',
+      error: 'Authentication required. Valid Bearer access token must be provided.',
       code: 'UNAUTHENTICATED'
     });
   }
 
-  let profile = store.getProfileById(userId);
-  if (!profile && tokenPayload) {
-    // Provision local profile for Supabase user if not yet stored
-    const email = tokenPayload.email || `${userId}@user.local`;
-    const fullName = tokenPayload.user_metadata?.full_name || email.split('@')[0];
-    profile = store.createProfile({
-      id: userId,
-      fullName: fullName.charAt(0).toUpperCase() + fullName.slice(1),
+  const rawToken = authHeader.slice(7).trim();
+  if (!rawToken || rawToken.startsWith('demo-token-')) {
+    return res.status(401).json({
+      error: 'Invalid or demo token. Real verified Supabase authentication required.',
+      code: 'INVALID_TOKEN'
+    });
+  }
+
+  // Strictly verify token using Supabase verification
+  const { user: verifiedUser, error: verifyError } = await verifyAccessToken(rawToken);
+  if (verifyError || !verifiedUser || !verifiedUser.id) {
+    return res.status(401).json({
+      error: 'Authentication token is invalid, expired, or signature could not be verified.',
+      code: 'INVALID_TOKEN'
+    });
+  }
+
+  // Derive profile identity strictly from the verified Supabase identity
+  const repo = getRepo();
+  let profile = await repo.getProfileById(verifiedUser.id);
+  if (!profile) {
+    // Upsert verified identity profile
+    const email = verifiedUser.email || `${verifiedUser.id}@user.local`;
+    const fullName = verifiedUser.user_metadata?.full_name || email.split('@')[0];
+    profile = await repo.upsertProfile({
+      id: verifiedUser.id,
       email,
-      phone: tokenPayload.user_metadata?.phone || '',
+      fullName: fullName.charAt(0).toUpperCase() + fullName.slice(1),
+      phone: verifiedUser.user_metadata?.phone || '',
       avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80`
     });
   }
 
-  if (!profile) {
-    return res.status(401).json({
-      error: 'User profile not found. Sign in to continue.',
-      code: 'PROFILE_NOT_FOUND'
-    });
-  }
-
   req.user = profile;
+  req.token = rawToken;
 
-  // The URL controls the authorization scope; a stale or forged header cannot
-  // grant a role from a different event when an event is selected.
+  // The URL strictly controls the authorization scope
   const pathParts = req.baseUrl === '/api/events' ? req.path.split('/') : [];
   const pathEventId = pathParts[1] || null;
   const isSpecialPath = ['join', 'preview-invite'].includes(pathEventId);
   const scopedEventId = pathEventId && !isSpecialPath ? pathEventId : null;
-  const eventId = scopedEventId || req.params.eventId || req.headers['x-event-id'];
+  const eventId = scopedEventId || req.params.eventId;
 
   if (eventId) {
     req.eventId = eventId;
-    req.membership = store.getMembership(eventId, req.user.id);
+    req.membership = await repo.getMembership(eventId, req.user.id);
   }
 
   if (scopedEventId && (!req.membership || req.membership.status !== 'active')) {

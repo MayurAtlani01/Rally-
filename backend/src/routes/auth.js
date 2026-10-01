@@ -1,44 +1,30 @@
 import { Router } from 'express';
-import { store } from '../store.js';
+import { getRepo } from '../db/repo.js';
+import { authMiddleware } from '../authMiddleware.js';
 
 const router = Router();
 
-router.get('/personas', (req, res) => {
-  const allProfiles = store.getProfiles();
-  const defaultEventId = 'ev-ignite-2026';
-  const members = store.getMemberships(defaultEventId);
+// /me is strictly protected and derives identity from the verified Supabase token
+router.get('/me', authMiddleware, async (req, res) => {
+  const repo = getRepo();
+  const userId = req.user.id;
+  const profile = await repo.getProfileById(userId);
 
-  const personas = allProfiles.slice(0, 8).map(p => {
-    const mem = members.find(m => m.userId === p.id);
-    return {
-      id: p.id,
-      name: p.fullName,
-      email: p.email,
-      avatarUrl: p.avatarUrl,
-      role: mem ? mem.role : 'volunteer',
-      bio: p.bio,
-      assignedZones: mem?.assignedZones || []
-    };
-  });
-
-  res.json({ personas, currentEventId: defaultEventId });
-});
-
-router.get('/me', (req, res) => {
-  const userId = req.headers['x-user-id'] || 'usr-organizer-elena';
-  const profile = store.getProfileById(userId);
   if (!profile) {
-    return res.status(404).json({ error: 'User profile not found' });
+    return res.status(404).json({ error: 'User profile not found.' });
   }
 
-  const memberships = store.getUserMemberships(userId);
-  const events = memberships.map(m => {
-    const ev = store.getEventById(m.eventId);
-    return {
-      ...m,
-      event: ev
-    };
-  });
+  const memberships = await repo.getUserMemberships(userId);
+  const events = [];
+  for (const m of memberships) {
+    const ev = await repo.getEventById(m.eventId);
+    if (ev) {
+      events.push({
+        ...m,
+        event: ev
+      });
+    }
+  }
 
   res.json({
     user: profile,
@@ -47,86 +33,36 @@ router.get('/me', (req, res) => {
   });
 });
 
-router.post('/login', (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
-  }
+// Sync profile from verified Supabase session
+// Security rule: Profile sync cannot create or update another user's identity
+router.post('/sync-profile', authMiddleware, async (req, res) => {
+  const { id, fullName, phone, bio } = req.body;
+  const verifiedUserId = req.user.id;
 
-  let profile = store.getProfileByEmail(email);
-  if (!profile) {
-    // If not found in demo mode, auto-create a user profile
-    const namePart = email.split('@')[0];
-    const fullName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-    profile = store.createProfile({
-      fullName,
-      email,
-      avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80`
+  // Prevent spoofing or writing to another user's profile
+  if (id && id !== verifiedUserId) {
+    return res.status(403).json({
+      error: 'Forbidden: You cannot modify another user’s profile identity.',
+      code: 'IDENTITY_SPOOFING_FORBIDDEN'
     });
   }
 
-  const memberships = store.getUserMemberships(profile.id);
-  res.json({
-    user: profile,
-    memberships,
-    token: `demo-token-${profile.id}`
-  });
-});
-
-router.post('/signup', (req, res) => {
-  const { fullName, email, phone, bio } = req.body;
-  if (!fullName || !email) {
-    return res.status(400).json({ error: 'Full name and email are required' });
-  }
-
-  const existing = store.getProfileByEmail(email);
-  if (existing) {
-    return res.status(400).json({ error: 'User with this email already exists' });
-  }
-
-  const profile = store.createProfile({
-    fullName,
-    email,
-    phone,
-    bio,
-    avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80`
+  const repo = getRepo();
+  const profile = await repo.upsertProfile({
+    id: verifiedUserId,
+    email: req.user.email,
+    fullName: fullName || req.user.fullName,
+    phone: phone !== undefined ? phone : req.user.phone,
+    bio: bio !== undefined ? bio : req.user.bio,
+    avatarUrl: req.user.avatarUrl
   });
 
-  res.status(201).json({
-    user: profile,
-    memberships: [],
-    token: `demo-token-${profile.id}`
-  });
-});
-
-// Sync profile from Supabase Auth into application store
-// Store application profile details separately from Auth credentials; no passwords stored here
-router.post('/sync-profile', (req, res) => {
-  const { id, email, fullName, phone, bio } = req.body;
-  if (!id || !email) {
-    return res.status(400).json({ error: 'id and email are required to sync profile' });
+  const memberships = await repo.getUserMemberships(verifiedUserId);
+  const events = [];
+  for (const m of memberships) {
+    const ev = await repo.getEventById(m.eventId);
+    if (ev) events.push({ ...m, event: ev });
   }
-
-  let profile = store.getProfileById(id);
-  if (!profile) {
-    profile = store.createProfile({
-      id,
-      email,
-      fullName: fullName || email.split('@')[0],
-      phone: phone || '',
-      bio: bio || '',
-      avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80`
-    });
-  } else {
-    if (fullName) profile.fullName = fullName;
-    if (phone !== undefined) profile.phone = phone;
-    if (bio !== undefined) profile.bio = bio;
-    profile.updatedAt = new Date().toISOString();
-    store.save();
-  }
-
-  const memberships = store.getUserMemberships(profile.id);
-  const events = memberships.map(m => ({ ...m, event: store.getEventById(m.eventId) }));
 
   res.json({
     user: profile,
@@ -135,13 +71,11 @@ router.post('/sync-profile', (req, res) => {
   });
 });
 
-router.post('/reset-demo', (req, res) => {
-  const freshData = store.resetDemo();
-  res.json({
-    message: 'Demo dataset successfully reset to default state.',
-    eventsCount: freshData.events.length,
-    shiftsCount: freshData.shifts.length,
-    volunteersCount: freshData.profiles.length
+// Retired demo endpoints return 404 with clear actionable explanation
+router.all(['/login', '/signup', '/personas', '/reset-demo'], (req, res) => {
+  res.status(404).json({
+    error: 'Demo authentication is disabled. RALLY requires Supabase authentication. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend/.env and SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend/.env.',
+    code: 'SUPABASE_AUTH_REQUIRED'
   });
 });
 
