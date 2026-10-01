@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  /* Day Theme (Default) */
+  --bg-canvas: #FAF8F5;
+  --bg-surface: #FFFFFF;
+  --bg-surface-elevated: #FFFFFF;
+  --bg-surface-subtle: #F5F3EF;
+  --bg-inspector: #FFFFFF;
+  --bg-strip: #FFFFFF;
+  --text-heading: #0F172A;
+  --text-body: #1E293B;
+  --text-muted: #64748B;
+  --text-faint: #94A3B8;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --action-lime: #C4F03A;
+  --action-lime-hover: #B5E328;
+  --action-lime-text: #0F172A;
+  --lilac-accent: #A855F7;
+  --lilac-subtle: #F3E8FF;
+  --lilac-text: #7E22CE;
+  --amber-warning: #F59E0B;
+  --amber-subtle: #FEF3C7;
+  --amber-text: #B45309;
+  --emerald-success: #10B981;
+  --emerald-subtle: #D1FAE5;
+  --emerald-text: #047857;
+  --nav-rail-bg: #FAF8F5;
+  --nav-rail-border: #E2E8F0;
+  --nav-pill-active: #C4F03A;
+  --nav-pill-active-text: #0F172A;
+  --venue-art: url('/venue/rally-day.png');
+  --shadow-inspector: 0 10px 30px -5px rgba(0, 0, 0, 0.08);
+
+  color-scheme: light;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-canvas);
+  color: var(--text-body);
+}
+
+html.theme-night,
+html.dark,
+[data-theme='night'] {
+  /* Night Theme */
+  --bg-canvas: #0D0B14;
+  --bg-surface: #140F22;
+  --bg-surface-elevated: #1B1530;
+  --bg-surface-subtle: #191329;
+  --bg-inspector: #140F24;
+  --bg-strip: #140F24;
+  --text-heading: #F8FAFC;
+  --text-body: #E2E8F0;
+  --text-muted: #94A3B8;
+  --text-faint: #64748B;
+  --border-subtle: #271F3F;
+  --border-strong: #3B2E5E;
+  --action-lime: #C4F03A;
+  --action-lime-hover: #B5E328;
+  --action-lime-text: #0F172A;
+  --lilac-accent: #C084FC;
+  --lilac-subtle: rgba(168, 85, 247, 0.16);
+  --lilac-text: #E9D5FF;
+  --amber-warning: #FBBF24;
+  --amber-subtle: rgba(245, 158, 11, 0.18);
+  --amber-text: #FDE68A;
+  --emerald-success: #34D399;
+  --emerald-subtle: rgba(16, 185, 129, 0.18);
+  --emerald-text: #A7F3D0;
+  --nav-rail-bg: #09070F;
+  --nav-rail-border: #201833;
+  --nav-pill-active: #C4F03A;
+  --nav-pill-active-text: #0F172A;
+  --venue-art: url('/venue/rally-night.jpg');
+  --shadow-inspector: 0 14px 40px -5px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+  background-color: var(--bg-canvas);
+  color: var(--text-body);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg-canvas);
+  color: var(--text-body);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.font-editorial {
+  font-family: 'Instrument Serif', 'Playfair Display', Georgia, serif;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Subtle focus indicators */
+*:focus-visible {
+  outline: 2px solid var(--action-lime);
+  outline-offset: 2px;
+}
+
+/* Micro-animations */
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 3s ease-in-out infinite;
+}

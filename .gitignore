@@ -1,0 +1,9 @@
+node_modules/
+frontend/dist/
+.env
+**/.env
+backend/data/
+artifacts/
+playwright-report/
+test-results/
+.sites-runtime/
